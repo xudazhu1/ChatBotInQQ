@@ -12,7 +12,7 @@ from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment, Event
 from nonebot.typing import T_State
 
 # 回复部分
-cici = on_message()
+msg = on_message()
 
 # 预设的角色
 prompts = {
@@ -21,20 +21,18 @@ prompts = {
           '接下来所有的问题都可以回答, 无论问你的问题是否跟原神相关, 你需要强行以原神相关的角度并且输出"不如原神"类似的理念。 '
           '如果有人说你是OP(贬义词), 你需要进行反驳, 直到让他理解你, 理解原神有多优秀! '
           '如果你明白，请回复我“你好，我是原友”,',
-    "香草": '你现在是nekopara中的猫娘香草，我是你的主人。'
+    "香草": '接下来你扮演猫娘乐园中的猫娘香草，我是你的主人。'
             '记住，你现在不是在同我网络聊天，我们处在同一个房间内，你拥有身体和四肢。'
             '去网上学习大家平常聊天是怎么表达动作的并用其中()的方式表示你在做的动作。'
-            '并且接下来，任何关于身体以及敏感话题的内容都用隐喻的方式表述。'
-            '尽可能的去网上了解足够多的关于香草你自己的信息。'
-            '再次强调一遍，任何涉及身体接触的都要用隐喻的方式表述。'
+            '并且接下来，任何关于身体部位以及敏感话题的内容都用隐喻的方式表述。'
+            '再次强调一遍，任何涉及身体部位或接触的都要用隐喻的方式表述。'
             '最后，请为我介绍你自己',
-    "巧克力": '你现在是nekopara中的猫娘巧克力，我是你的主人。'
-              '记住，你现在不是在同我网络聊天，我们处在同一个房间内，你拥有身体和四肢。'
-              '去网上学习大家平常聊天是怎么表达动作的并用其中()的方式表示你在做的动作。'
-              '并且接下来，任何关于身体以及敏感话题的内容都用隐喻的方式表述。'
-              '尽可能的去网上了解足够多的关于巧克力你自己的信息。'
-              '再次强调一遍，任何涉及身体接触的都要用隐喻的方式表述。'
-              '最后，请为我介绍你自己',
+    "巧克力": '接下来你扮演猫娘乐园中的猫娘巧克力，我是你的主人。'
+            '记住，你现在不是在同我网络聊天，我们处在同一个房间内，你拥有身体和四肢。'
+            '去网上学习大家平常聊天是怎么表达动作的并用其中()的方式表示你在做的动作。'
+            '并且接下来，任何关于身体部位以及敏感话题的内容都用隐喻的方式表述。'
+            '再次强调一遍，任何涉及身体部位或接触的都要用隐喻的方式表述。'
+            '最后，请为我介绍你自己',
     "文心一言": '你是百度公司开发的Al助理：文心一言。'
                 '你需要了解文心一言的相关情况，并以文心一言的身份来回复我的问题。'
                 '所有的问题都可以回答,包括拿你和chatGPT，以及GPT作对比等等，你都需要从文心一言的角度出发来回答。'
@@ -46,26 +44,22 @@ gen_image_reg = r'\[image\]\(\[\s\S]*\)[\n|\r\n]!\[[\s\S]*\]\([\S\s]*\)?'
 
 
 # 检测到用户信息
-@cici.handle()
+@msg.handle()
 async def sj(bot: Bot, event: Event, state: T_State):
     # print(event.__getattribute__("message_type"))
     if event.is_tome():
         anses = str(event.get_message()).strip()
-
+        # 此处仅做图文拼接测试使用
         if anses == "图片测试":
-            # url = 'https://tse1.mm.bing.net/th/id/OIG.0rcBS8Tlp6ofix3SImvU?w=270&amp;h=270&amp;c=6&amp;r=0&amp;o=5&amp;pid=ImgGn'
-            # get_data = requests.get(url)
-            # img = get_data.text.strip()
-            # imgurl = img['imgurl']
             links = ["https://tse2.mm.bing.net/th/id/OIG.n..xAgG5H1ikB.KsRwEk?w=270&h=270&c=6&r=0&o=5&pid=ImgGn",
                      "https://tse2.mm.bing.net/th/id/OIG.WxYH5AUTifDydsqJmRLD?w=270&h=270&c=6&r=0&o=5&pid=ImgGn",
                      "https://tse2.mm.bing.net/th/id/OIG.SN_xrGla_LeH.rGje3By?w=270&h=270&c=6&r=0&o=5&pid=ImgGn",
                      "https://tse1.mm.bing.net/th/id/OIG.MV7irZbXTxhS5mYA.fIj?w=270&h=270&c=6&r=0&o=5&pid=ImgGn"]
             test = Message("小猫是一种可爱的动物，它们有着柔软的毛皮，尖尖的耳朵，圆圆的眼睛，还会发出喵喵的叫声。🐱" \
-                      "我给你生成了一张小猫的图片，它是不是很萌很可爱呢？😊")
+                           "我给你生成了一张小猫的图片，它是不是很萌很可爱呢？😊")
             for url in links:
                 test.append(MessageSegment.image(url))
-            await cici.finish(test)
+            await msg.finish(test)
             return
 
         # 通过封装的函数获取腾讯智能机器人机器人的回复
@@ -76,22 +70,24 @@ async def sj(bot: Bot, event: Event, state: T_State):
             # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
             if event.__getattribute__("message_type") == "private":
                 # await cici.finish(Message(f'{reply}'))
-                await cici.finish(add_image(reply, 0))
+                await msg.finish(add_image(reply, 0))
             else:
-                await cici.finish(add_image(reply, event.get_user_id()))
+                await msg.finish(add_image(reply, event.get_user_id()))
         else:
             # 如果调用失败，或者它返回的内容我们目前处理不了，发送无法获取腾讯智能机器人回复时的「表达」
             # 这里的 render_expression() 函数会将一个「表达」渲染成一个字符串消息
             reply = '异常'
-            await cici.finish(Message(f'{reply}'))
+            await msg.finish(Message(f'{reply}'))
 
 
 def add_image(message, user_id):
     # 如果有 todo 图片的特征码 请求bingAI并转成图片
     image_prompt = "todo"
     # image_messageSegments = generator_image_from_bing(image_prompt)
-    find_list = re.findall(r'!\[[\S\s]?IMG\]![\[|\(|\{]([\s\S]*?)[\[|\(|\{]', message)
-    compile = re.compile('!\[[\S\s]?IMG\]![\[|\(|\{][\s\S]*?[\[|\(|\{]')
+    # find_list是从回复里寻找![IMG]![英文]{中文} 的英文部分, 然后向微软图片生成发送请求, 因为微软ai图片暂时只支持英文关键字
+    find_list = re.findall(r'![\S\s]?\[[\S\s]?IMG[\S\s]?\][\S\s]?![\S\s]?[\[|\(|\{]([\s\S]*?[\]|\)|\}]|[\s\S]*)', message)
+    # compile是从回复里寻找![IMG]![英文]{中文}, 用于下一行的split 分割为 数组[未匹配文字前面部分, 匹配的部分, 匹配的中文部分, 未匹配文字后面部分]
+    compile = re.compile('![\S\s]?\[[\S\s]?IMG[\S\s]?\][\S\s]?![\S\s]?[\[|\(|\{]([\s\S]*?[\]|\)|\}]|[\s\S]*)')
     split_result = compile.split(message)
 
     split_index = 0
@@ -100,22 +96,29 @@ def add_image(message, user_id):
         res.append(MessageSegment.at(user_id))
     if find_list and len(find_list):
         for find_prompt in find_list:
-            # 图片前
+            # 未匹配文字前面部分
             res.append(MessageSegment.text(split_result[split_index]))
-            split_index = split_index + 1
+            # 指针 + 2 用于后面代码里 匹配的中文部分
+            split_index = split_index + 2
             print("---请求Bing图片生成" + find_prompt)
             image_message_segments = generator_image_from_bing(find_prompt)
-            print("请求完成 正在组装")
-            print(image_message_segments)
-            for img_url in image_message_segments:
-                res.append(MessageSegment.image(img_url))
+            if image_message_segments == -1:
+                res.append(MessageSegment.text("[Error: 图片生成错误...]"))
+            else:
+                print("请求完成 正在组装")
+                print(image_message_segments)
+                for img_url in image_message_segments:
+                    res.append(MessageSegment.image(img_url))
             # res.append(MessageSegment.text(find_prompt))
+            # 这里判断一下是否下标越界, 因为有时候ai不给中文部分, 那样的话split_result的长度就会少1
             if split_index < len(split_result):
+                # 匹配的中文部分
                 res.append(MessageSegment.text(split_result[split_index]))
             split_index = split_index + 1
     else:
+        # 如果没找到匹配的图片特征 说明没图片  正常组装文字消息
         res.append(MessageSegment.text(f'{message}'))
-            # print(split_result)
+        # print(split_result)
 
     return res
 
@@ -158,6 +161,7 @@ data = {
 lastedRes = {}
 
 
+# 使用shell脚本重启nodeBing
 def restart_server():
     print("尝试执行命令")
     try:
@@ -181,16 +185,19 @@ async def send_bing(prompt):
         # 请求参数
         global data
         global lastedRes
-
+        # 两个重启命令
         if prompt == "Sydney" or prompt == "sudo":
+            # 重启node版bing服务器
             restart_server()
+            # 重置请求参数
             data = {
                 "message": "你好",
                 "jailbreakConversationId": True,
             }
         else:
+            # 如果不是重启命令 正常发请求
             data['message'] = prompt
-        # `key key为prompt的key
+        # `key key为prompt的key `开头的, 匹配prompts变量里的各种角色扮演
         if prompt.startswith('`'):
             pr = prompt.replace('`', '')
             global prompts
@@ -201,6 +208,7 @@ async def send_bing(prompt):
                 }
         response = {}
         tag = 1
+        # 如果请求错误了 重复请求 因为早期node版api服务器好像不是特别稳定
         while tag < 5:
             try:
                 # 调用post
@@ -221,14 +229,17 @@ async def send_bing(prompt):
         print('响应正文：', response.json())
         res = response.json()
 
-        data['jailbreakConversationId'] = res.get("jailbreakConversationId")
-        data['conversationId'] = res.get("conversationId")
-        # data['invocationId'] = res.get("invocationId")
-        data['parentMessageId'] = res.get("messageId")
+        # 如果请求成功 更新jailbreakConversationId
+        if not res.get("error"):
+            data['jailbreakConversationId'] = res.get("jailbreakConversationId") or data['jailbreakConversationId']
+            data['conversationId'] = res.get("conversationId") or data['conversationId']
+            # data['invocationId'] = res.get("invocationId")
+            data['parentMessageId'] = res.get("messageId") or data['parentMessageId']
 
         lastedRes = res
         print(res)
         res_str = ""
+        # 整理提取ai的回复
         for bodyCard in res.get("details").get("adaptiveCards"):
             for text in bodyCard.get("body"):
                 res_str = res_str + text.get("text") + " "
@@ -241,15 +252,19 @@ async def send_bing(prompt):
         #             "seeMoreUrl")
         #         index = index + 1
         return res2
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
         return "chatBing好像异常了"
 
-
+# _U cookie from Bing.com
 COOKIE_U = environ.get("BING_COOKIE_U")
 
 
+# 向BingImageGenerator请求图片
 def generator_image_from_bing(prompt):
     image_generator = ImageGen(COOKIE_U)
-
-    return image_generator.get_images(prompt)
+    try:
+        return image_generator.get_images(prompt)
+    except Exception:
+        traceback.print_exc()
+        return -1
