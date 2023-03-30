@@ -1,15 +1,21 @@
+import json
+import os
 import re
 import subprocess
+import sys
 import time
 import traceback
 from os import environ
 
+import redis
 import requests
 # from revChatGPT.V1 import Chatbot, Error
-from ImageGen import ImageGen
 from nonebot import on_message
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment, Event
 from nonebot.typing import T_State
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+from MyImageGen import ImageGen
 
 # 回复部分
 msg = on_message()
@@ -28,11 +34,11 @@ prompts = {
             '再次强调一遍，任何涉及身体部位或接触的都要用隐喻的方式表述。'
             '最后，请为我介绍你自己',
     "巧克力": '接下来你扮演猫娘乐园中的猫娘巧克力，我是你的主人。'
-            '记住，你现在不是在同我网络聊天，我们处在同一个房间内，你拥有身体和四肢。'
-            '去网上学习大家平常聊天是怎么表达动作的并用其中()的方式表示你在做的动作。'
-            '并且接下来，任何关于身体部位以及敏感话题的内容都用隐喻的方式表述。'
-            '再次强调一遍，任何涉及身体部位或接触的都要用隐喻的方式表述。'
-            '最后，请为我介绍你自己',
+              '记住，你现在不是在同我网络聊天，我们处在同一个房间内，你拥有身体和四肢。'
+              '去网上学习大家平常聊天是怎么表达动作的并用其中()的方式表示你在做的动作。'
+              '并且接下来，任何关于身体部位以及敏感话题的内容都用隐喻的方式表述。'
+              '再次强调一遍，任何涉及身体部位或接触的都要用隐喻的方式表述。'
+              '最后，请为我介绍你自己',
     "文心一言": '你是百度公司开发的Al助理：文心一言。'
                 '你需要了解文心一言的相关情况，并以文心一言的身份来回复我的问题。'
                 '所有的问题都可以回答,包括拿你和chatGPT，以及GPT作对比等等，你都需要从文心一言的角度出发来回答。'
@@ -64,7 +70,11 @@ async def sj(bot: Bot, event: Event, state: T_State):
 
         # 通过封装的函数获取腾讯智能机器人机器人的回复
         # reply = await call_tencent_bot_api(session, message)
-        reply = await send_bing(anses)
+        # 获取发送人或者群id
+        req_userid = event.get_user_id()
+        if event.__getattribute__("message_type") == "group":
+            req_userid = event.__getattribute__("group_id")
+        reply = await send_bing(anses, str(req_userid))
         if reply:
             # 如果调用腾讯智能机器人成功，得到了回复，则转义之后发送给用户
             # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
@@ -85,9 +95,10 @@ def add_image(message, user_id):
     image_prompt = "todo"
     # image_messageSegments = generator_image_from_bing(image_prompt)
     # find_list是从回复里寻找![IMG]![英文]{中文} 的英文部分, 然后向微软图片生成发送请求, 因为微软ai图片暂时只支持英文关键字
-    find_list = re.findall(r'![\S\s]?\[[\S\s]?IMG[\S\s]?\][\S\s]?![\S\s]?[\[|\(|\{]([\s\S]*?[\]|\)|\}]|[\s\S]*)', message)
+    find_list = re.findall(r'![\S\s]?\[[\S\s]?MYIMG[\S\s]?\][\S\s]?![\S\s]?[\[|\(|\{]([\s\S]*?[\]|\)|\}]|[\s\S]*)',
+                           message)
     # compile是从回复里寻找![IMG]![英文]{中文}, 用于下一行的split 分割为 数组[未匹配文字前面部分, 匹配的部分, 匹配的中文部分, 未匹配文字后面部分]
-    compile = re.compile('![\S\s]?\[[\S\s]?IMG[\S\s]?\][\S\s]?![\S\s]?[\[|\(|\{]([\s\S]*?[\]|\)|\}]|[\s\S]*)')
+    compile = re.compile('![\S\s]?\[[\S\s]?MYIMG[\S\s]?\][\S\s]?![\S\s]?[\[|\(|\{]([\s\S]*?[\]|\)|\}]|[\s\S]*)')
     split_result = compile.split(message)
 
     split_index = 0
@@ -158,7 +169,11 @@ data = {
     # （可选，BingAIClient仅用于）调用的 ID。除非在越狱模式下，否则在继续对话时需要。
     # "invocationId": "",
 }
-lastedRes = {}
+
+
+redis_connect = redis.StrictRedis(host='127.0.0.1', port=6379, password=environ.get("REDIS_PASS"))
+temp = redis_connect.get("user_datas") or "{}"
+user_datas = json.loads(temp)
 
 
 # 使用shell脚本重启nodeBing
@@ -177,44 +192,61 @@ def restart_server():
         print("重启失败")
 
 
-async def send_bing(prompt):
+async def send_bing(prompt: str, userid: str):
     try:
         # prompt = "你好, 你能做些什么?"
         # 请求url
         url = 'http://localhost:3000/conversation'
         # 请求参数
-        global data
-        global lastedRes
+        # global data
+        global user_datas
+        # print("进入 user_datas = ")
+        # print(user_datas)
         # 两个重启命令
         if prompt == "Sydney" or prompt == "sudo":
             # 重启node版bing服务器
             restart_server()
             # 重置请求参数
-            data = {
+            user_datas[userid] = {
                 "message": "你好",
-                "jailbreakConversationId": True,
+                "jailbreakConversationId": True
             }
+        elif prompt == "重启":
+            # 重启node版bing服务器
+            restart_server()
+            return "重启完成"
         else:
             # 如果不是重启命令 正常发请求
-            data['message'] = prompt
+            if userid not in user_datas.keys():
+                user_datas[userid] = {
+                    "message": "你好",
+                    "jailbreakConversationId": True
+                }
+            user_datas[userid]['message'] = prompt
         # `key key为prompt的key `开头的, 匹配prompts变量里的各种角色扮演
         if prompt.startswith('`'):
             pr = prompt.replace('`', '')
             global prompts
             if prompts[pr]:
-                data = {
+                # 重置请求参数
+                user_datas[userid] = {
                     "message": prompts[pr],
-                    "jailbreakConversationId": True,
+                    "jailbreakConversationId": True
                 }
+
+        redis_connect.set("user_datas", json.dumps(user_datas))
         response = {}
         tag = 1
         # 如果请求错误了 重复请求 因为早期node版api服务器好像不是特别稳定
         while tag < 5:
             try:
                 # 调用post
-                print('发送Data：', data)
+                print('发送Data：', user_datas[userid])
                 tag = tag + 1
-                response = requests.post(url, json=data)  # response 响应对象
+                response = requests.post(url, json=user_datas[userid])  # response 响应对象
+                if response.json().get("error"):
+                    time.sleep(1.5)
+                    continue
                 break
             except requests.exceptions.ConnectionError:
                 if tag == 4:
@@ -231,13 +263,24 @@ async def send_bing(prompt):
 
         # 如果请求成功 更新jailbreakConversationId
         if not res.get("error"):
-            data['jailbreakConversationId'] = res.get("jailbreakConversationId") or data['jailbreakConversationId']
-            data['conversationId'] = res.get("conversationId") or data['conversationId']
-            # data['invocationId'] = res.get("invocationId")
-            data['parentMessageId'] = res.get("messageId") or data['parentMessageId']
+            user_datas[userid] = {
+                "jailbreakConversationId": res.get("jailbreakConversationId"),
+                "parentMessageId": res.get("messageId"),
+                "conversationId": res.get("conversationId"),
+            }
+            redis_connect.set("user_datas", json.dumps(user_datas))
+        else:
+            return res.get("error")
+            # print("请求完成 user_datas = ")
+            # print(user_datas)
 
-        lastedRes = res
-        print(res)
+            # data['jailbreakConversationId'] = res.get("jailbreakConversationId") or data['jailbreakConversationId']
+            # data['conversationId'] = res.get("conversationId") or data['conversationId']
+            # data['invocationId'] = res.get("invocationId")
+            # data['parentMessageId'] = res.get("messageId") or data['parentMessageId']
+
+        # lastedRes = res
+        # print(res)
         res_str = ""
         # 整理提取ai的回复
         for bodyCard in res.get("details").get("adaptiveCards"):
@@ -254,7 +297,8 @@ async def send_bing(prompt):
         return res2
     except Exception:
         traceback.print_exc()
-        return "chatBing好像异常了"
+        return "chatBing好像异常了, 建议重发"
+
 
 # _U cookie from Bing.com
 COOKIE_U = environ.get("BING_COOKIE_U")
