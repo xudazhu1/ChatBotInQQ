@@ -1,5 +1,7 @@
+import datetime
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -103,6 +105,7 @@ prompts_temp = redis_connect.get("prompts")
 if prompts_temp:
     prompts = json.loads(prompts_temp)
 
+
 # 检测到用户信息
 @msg.handle()
 async def sj(bot: Bot, event: Event, state: T_State):
@@ -112,7 +115,7 @@ async def sj(bot: Bot, event: Event, state: T_State):
         # 此处仅做图文拼接测试使用
         if ans == "图片测试":
             prompt_temp = "A picture of a beautiful woman with long blonde hair and blue eyes. She is wearing a white blouse and a black skirt, and a pair of black glasses. She has a sweet smile on her face, showing her white teeth. She is holding a book in her hand, and looking at the camera with love in her eyes"
-            res = gen_img(prompt_temp)
+            res = gen_img(prompt_temp, 0)
             test = Message("测试？😊")
             current_working_dir = os.getcwd()
             # test.append(MessageSegment.image("file://" + current_working_dir + "/test.png"))
@@ -151,8 +154,12 @@ async def sj(bot: Bot, event: Event, state: T_State):
 
         if ans == "clear":
             await msg.finish(Message(MessageSegment.text(clear_msg())))
+            return
         if ans == "session":
             await msg.finish(Message(MessageSegment.text(user_datas[str(req_userid)])))
+            return
+        if ans == "!c":
+            ans = gen_continue_sentence()
         if ans == "重启":
             # 重启node版bing服务器
             restart_server()
@@ -165,26 +172,26 @@ async def sj(bot: Bot, event: Event, state: T_State):
             # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
             if event.__getattribute__("message_type") == "private":
                 # await cici.finish(Message(f'{reply}'))
-                await msg.send(add_image(reply, 0))
+                await send_(msg, add_image(reply, 0))
             else:
-                await msg.send(add_image(reply, event.get_user_id()))
+                await send_(msg, add_image(reply, event.get_user_id()))
             # 这里判断ai的话是否讲完, 没讲完可能被审核截胡了
-            index = 0
-            while "_end" not in reply:
-                index = index + 1
-                if index >= 3:
-                    await msg.send(Message(MessageSegment.text("自动继续对话请求超过3次, 请手动继续...")))
-                    return
-                time.sleep(3)
-                reply = await send_bing('_end_?', str(req_userid))
-                if reply:
-                    # 如果调用腾讯智能机器人成功，得到了回复，则转义之后发送给用户
-                    # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
-                    if event.__getattribute__("message_type") == "private":
-                        # await cici.finish(Message(f'{reply}'))
-                        await msg.send(add_image(reply, 0))
-                    else:
-                        await msg.send(add_image(reply, event.get_user_id()))
+            # index = 0
+            # while "_end" not in reply:
+            #     index = index + 1
+            #     if index >= 3:
+            #         await msg.send(Message(MessageSegment.text("自动继续对话请求超过3次, 请手动继续...")))
+            #         return
+            #     time.sleep(6)
+            #     reply = await send_bing(gen_continue_sentence(), str(req_userid))
+            #     if reply:
+            #         # 如果调用腾讯智能机器人成功，得到了回复，则转义之后发送给用户
+            #         # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
+            #         if event.__getattribute__("message_type") == "private":
+            #             # await cici.finish(Message(f'{reply}'))
+            #             await send_(msg, add_image(reply, 0))
+            #         else:
+            #             await send_(msg, add_image(reply, event.get_user_id()))
             return
 
         else:
@@ -194,16 +201,38 @@ async def sj(bot: Bot, event: Event, state: T_State):
             await msg.finish(Message(f'{reply}'))
 
 
+def gen_continue_sentence():
+    sen = "你似乎没说完, 继续讲吧! 直接接着说, 不要重复你刚刚说过的句子哦~, 如果讲完了不要忘记加上"
+    char_list = list(sen)
+
+    index = 1
+    while index < len(char_list):
+        step = random.randint(2, 4)
+        if step > 2:
+            char_list.insert(index, "_")
+        else:
+            char_list.insert(index, "__")
+        index = index + step
+    return ''.join(char_list)
+
+
+async def send_(obj, message):
+    try:
+        await obj.send(message)
+    except Exception:
+        traceback.print_exc()
+        print("消息发送错误")
+
+
 def add_image(message_temp, user_id):
     message = message_temp.replace("_end_", '__').replace("_end", '__')
-    # 如果有 todo 图片的特征码 请求bingAI并转成图片
-    image_prompt = "todo"
+    # 如果有  图片的特征码 请求bingAI并转成图片
     # image_messageSegments = generator_image_from_bing(image_prompt)
     # find_list是从回复里寻找![IMG]![英文]{中文} 的英文部分, 然后向微软图片生成发送请求, 因为微软ai图片暂时只支持英文关键字
-    find_list = re.findall(r'![\S\s]?\[[\S\s]?MYIMG[\S\s]?\][\S\s]?![\S\s]?[\[|\(|\{]([\s\S]*?[\]|\)|\}]|[\s\S]*)',
+    find_list = re.findall(r'![\S\s]?\[[\S\s]?MYIMG[\S\s]?\][\S\s]?![\S\s]?[\[|\{]([\s\S]*?[\]|\}]|[\s\S]*)',
                            message)
     # compile是从回复里寻找![IMG]![英文]{中文}, 用于下一行的split 分割为 数组[未匹配文字前面部分, 匹配的部分, 匹配的中文部分, 未匹配文字后面部分]
-    compile_res = re.compile('![\S\s]?\[[\S\s]?MYIMG[\S\s]?\][\S\s]?![\S\s]?[\[|\(|\{]([\s\S]*?[\]|\)|\}]|[\s\S]*)')
+    compile_res = re.compile('![\S\s]?\[[\S\s]?MYIMG[\S\s]?\][\S\s]?![\S\s]?[\[|\{]([\s\S]*?[\]|\}]|[\s\S]*)')
     split_result = compile_res.split(message)
 
     img_index = 0
@@ -284,7 +313,7 @@ async def send_bing(prompt: str, userid: str):
             restart_server()
             # 重置请求参数
             user_datas[userid] = {
-                "message": "你好",
+                "message": "",
                 "toneStyle": "creative",
                 "jailbreakConversationId": True
             }
@@ -293,11 +322,11 @@ async def send_bing(prompt: str, userid: str):
             # 如果不是重启命令 正常发请求
             if userid not in user_datas.keys():
                 user_datas[userid] = {
-                    "message": "你好啊",
+                    "message": "",
                     "toneStyle": "creative",
                     "jailbreakConversationId": True
                 }
-            user_datas[userid]['message'] = prompt
+            user_datas[userid]['message'] = prompt + " _end_"
         # `key key为prompt的key `开头的, 匹配prompts变量里的各种角色扮演
         if prompt.startswith('`'):
             pr = prompt.replace('`', '')
@@ -352,7 +381,8 @@ async def send_bing(prompt: str, userid: str):
 
         # 如果请求成功 更新jailbreakConversationId
         if res.get("error"):
-            return res.get("error") + "_end_"
+            restart_server()
+            return "err: " + res.get("error") + "_end_"
             # print("请求完成 user_datas = ")
             # print(user_datas)
 
@@ -369,13 +399,17 @@ async def send_bing(prompt: str, userid: str):
             for text in bodyCard.get("body"):
                 res_str = res_str + text.get("text") + " "
         res2 = res.get("response") or res.get("details").get("text") or res_str
-        index = 1
+        # index = 1
         # # 拼接参考链接
         # if res.get("details").get("sourceAttributions"):
         #     for sources in res.get("details").get("sourceAttributions"):
         #         res2 = res2 + "\n[" + str(index) + "]: [" + sources.get("providerDisplayName") + "]" + sources.get(
         #             "seeMoreUrl")
         #         index = index + 1
+        # todo 如果有隐藏话语 重启下服务器
+        if res.get("details") and res.get("details").get("hiddenText"):
+            print("发现 hiddenText , 重启服务器")
+            restart_server()
         if "The moderation filter triggered" in res2:
             restart_server()
             return res2 + "_end_"
@@ -420,23 +454,62 @@ api.set_auth("easy", SDW_PASS)
 
 # 使用stable-diffusion-webui生成图片
 def gen_img(prompt, img_index):
+    prompt = prompt.replace("!SD!", "")
     # prompt = "A picture of a brown catgirl and a white catgirl without clothes, " \
     #          "cuddling each other, looking shy and cute. " \
     #          "They have brown and blue eyes and hair, and cat ears and tail. " \
     #          "They are wearing collars with bells"
     try:
-        prompt = "masterpiece, best quality, perfect body, " + prompt
-        negative_prompt = "(worst quality, low quality:1.4), third leg, third foot, multiple legs, multiple arms, multiple digits, monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,(extra fingers:1.4),too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, oversized head,extra body, huge breasts, extra navel, extra clothes, extra tail,extra head, extra eyes, big breasts, super breasts, "
+        # prompt = "masterpiece, best quality, perfect anatomy, " + prompt
+
+        # prompt = "<lora:japaneseDollLikeness_v15:0.3>," \
+        #          "<lora:koreandolllikenessV20:0.3>," \
+        #          "<lora:breastinclassBetter_v141:0.3>, " \
+        #          "masterpiece, best quality, perfect anatomy, " + prompt
+        nsfw = ""
+        h = time.localtime().tm_hour
+        if 9 <= h <= 17:
+            nsfw = "(nsfw:1.0), (naked:1.0), (nude:1.0), (pussy:1.0), (panties:1.0), (bare thighs:1.0), "
+
+        # 真人模型配置
+        style = "6:girl"
+        # 生成3个lora随机数
+        prompt = gen_img_styles.get(style).get("prompt").replace("{{p}}", prompt)\
+            .replace("{{l1}}", str(random.randint(1, 4) / 10))\
+            .replace("{{l2}}", str(random.randint(1, 4) / 10))
+            # .replace("{{l3}}", str(random.randint(2, 5) / 10))
+        # 真人模型反向词 negative_prompt
+        negative_prompt = nsfw + gen_img_styles.get(style).get("negative_prompt")
+        # print(prompt)
+
+        # negative_prompt = nsfw + "(worst quality, bad quality, normal quality:1.4), watermark, text, error, blurry, cropped, low quality, normal quality, signature, username, artist name, bad anatomy, extra fingers, mutated hands, ((poorly drawn ha)), ((poorly drawn face)), (((mutation))), (((deformed))), blurry, ((bad anatomy)), (((bad proportions))), ear rings, zombie, (bad-artist:0.7), huge breasts, "
+        # negative_prompt = nsfw + "(worst quality, low quality:1.4), third leg, third foot, multiple legs, multiple arms, multiple digits, monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,(extra fingers:1.4),too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, oversized head,extra body, huge breasts, extra navel, extra clothes, extra tail,extra head, extra eyes, big breasts, super breasts, "
         # negative_prompt = "EasyNegative,disfigured,bad anatomy,futa,sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, normal quality, ((monochrome)), ((grayscale)), skin spots, acnes, skin blemishes, bad anatomy,(long hair:1.4),DeepNegative,(fat:1.2),facing away, looking away,tilted head, {Multiple people}, lowres,bad anatomy,bad hands, text, error, missing fingers,extra digit, fewer digits, cropped, worstquality, low quality, normal quality,jpegartifacts,signature, watermark, username,blurry,bad feet,cropped,poorly drawn hands,poorly drawn face,mutation,deformed,worst quality,low quality,normal quality,jpeg artifacts,signature,watermark,extra fingers,fewer digits,extra limbs,extra arms,extra legs,malformed limbs,fused fingers,too many fingers,long neck,cross-eyed,mutated hands,polar lowres,bad body,bad proportions,gross proportions,text,error,missing fingers,missing arms,missing legs,extra digit, extra arms, extra leg, extra foot,teeth"
         print("请求.. webuiapi...")
+        print(prompt)
+        print("------")
+        print(negative_prompt)
+        send_time = time.time()
+        path = "./" + img_index.__str__() + "-test.png"
         result1 = api.txt2img(
             prompt=prompt,
             negative_prompt=negative_prompt,
+            alwayson_scripts={"Tiled VAE": {
+                "args": [
+                    True,
+                    True,
+                    True,
+                    True,
+                    True,
+                    1280,
+                    128]
+            }},
             seed=-1,
-            width=720,
+            width=640,
             height=1080,
-            styles=["anime"],
-            cfg_scale=6,
+            restore_faces=True,
+            # styles=["anime"],
+            cfg_scale=gen_img_styles.get(style).get("cfg_scale"),
             #                      sampler_index='DDIM',
             #                      steps=30,
             #                      enable_hr=True,
@@ -448,21 +521,144 @@ def gen_img(prompt, img_index):
             #                      denoising_strength=0.4,
 
         )
-        path = "./" + img_index.__str__() + "-test.png"
         result1.image.save(fp=path)
+        # print("原图请求完成 目前花费时间=" + str(time.time() - send_time) + "秒")
+        #
+        # # 2倍缩放
+        # result3 = api.extra_single_image(image=result1.image,
+        #                                  extras_upscaler_2_visibility=1,
+        #                                  codeformer_visibility=0.3,
+        #                                  # upscaler_1=webuiapi.Upscaler.ESRGAN_4x,
+        #                                  # upscaler_1="R-ESRGAN 4x+ Anime6B",
+        #                                  upscaler_1="R-ESRGAN 4x+",
+        #                                  upscaler_2="R-ESRGAN 4x+",
+        #                                  upscaling_resize=2)
+        # print(result3.image.size)
+        #
+        # result3.image.save(fp=path)
+
         print("请求完成! 已存入=" + path)
+        print("缩放请求完成 目前花费时间=" + str(time.time() - send_time) + "秒")
+
         return [path]
     except Exception:
         traceback.print_exc()
         return -1
 
 
+gen_img_styles = {
+    "0:测试": {
+        "prompt": "8k,RAW8k, RAW photo, best quality, ultra high res, photorealistic,"  # 画质
+                  "(ulzzang-6500-v1.1:STR),"  # 官方建议辅助
+                  # 人物lora和人物特征
+                  "<lora:cuteGirlMix4_v10:0.4> <lora:japaneseDollLikeness_v10:0.4> <lora:koreanDollLikeness_v10:0.2>,"  
+                  "blurry background , contour light , soft lighting, professional lighting, "
+                  "photon mapping, radiosity, depth of field, light on face,(full body:1.5),"
+                  "(realistic face, realistic body,:1.5), (real natural eyes:1.5) "
+                  "({{p}},:1.7)"
+                  "((1girl,solo)),"  # 主要元素
+                  # 画面构成
+                  "blurry background , contour light, soft lighting, professional lighting, photon mapping, radiosity, "
+                  "depth of field, light on face,(full body:1.8),"
+                  # 人物细节
+                  "realistic face, realistic body,extremely detailed eyes and face,"
+                  # 背景构成
+                  "(outdoors, city, city lights,cityscape,night)",
+        "negative_prompt": "paintings, sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, "
+                           "((monochrome)), ((grayscale)), skin spots, acnes, skin blemishes, age spot, glans, extra fingers, "
+                           "fewer fingers, ((watermark:2)), (white letters:1), (multi nipples), bad anatomy, bad hands, text, "
+                           "error, missing fingers, missing arms, missing legs, extra digit, fewer digits, cropped, worst quality, "
+                           "jpeg artifacts, signature, watermark, username, bad feet, {Multiple people}, blurry, poorly drawn hands, "
+                           "poorly drawn face, mutation, deformed, extra limbs, extra arms, extra legs, malformed limbs, fused fingers, "
+                           "too many fingers, long neck, cross-eyed, mutated hands, polar lowres, bad body, bad proportions, "
+                           "gross proportions, wrong feet bottom render, abdominal stretch, "
+                           "{{fused fingers}}, {{bad body}}, bad-picture-chill-75v, ng_deepnegative_v1_75t, EasyNegative, "
+                           "bad proportion body to legs, wrong toes, extra toes, missing toes, weird toes, "
+                           "2 body, 2 pussy, 2 upper, 2 lower, 2 head, 3 hand, 3 feet, 3 legs, extra long leg, super long leg, mirrored image, mirrored noise, "
+                           "(bad_prompt_version2:0.8), aged up, old,",
+        "cfg_scale": 11,
+        "steps": 20,
+        "sampler": "Euler"
+    },
+    "1:韩": {
+        "prompt": "(RAW photo, best quality), (realistic, photo-realistic:1.3), masterpiece, an extremely delicate and beautiful, "
+                  "extremely detailed, CG, unity , 2k wallpaper, Amazing, finely detail, extremely detailed CG unity 8k wallpaper, huge filesize, "
+                  "ultra-detailed, highres, absurdres, soft light, beautifull, detailed fingers, extremely detailed eyes and face, beautiful detailed nose, "
+                  "beautiful detailed eyes, long eyelashes, light on face, looking at viewer, (full body:1.3), realistic face, realistic body, beautiful detailed thigh, "
+                  "{{p}}, (ulzzang-6500-v1.1:0.8), <lora:koreandolllikenessV20:0.4>,",
+        "negative_prompt": "paintings, sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, "
+                           "((monochrome)), ((grayscale)), skin spots, acnes, skin blemishes, age spot, glans, extra fingers, "
+                           "fewer fingers, ((watermark:2)), (white letters:1), (multi nipples), bad anatomy, bad hands, text, "
+                           "error, missing fingers, missing arms, missing legs, extra digit, fewer digits, cropped, worst quality, "
+                           "jpeg artifacts, signature, watermark, username, bad feet, {Multiple people}, blurry, poorly drawn hands, "
+                           "poorly drawn face, mutation, deformed, extra limbs, extra arms, extra legs, malformed limbs, fused fingers, "
+                           "too many fingers, long neck, cross-eyed, mutated hands, polar lowres, bad body, bad proportions, "
+                           "gross proportions, wrong feet bottom render, abdominal stretch, "
+                           "{{fused fingers}}, {{bad body}}, bad-picture-chill-75v, ng_deepnegative_v1_75t, EasyNegative, "
+                           "bad proportion body to legs, wrong toes, extra toes, missing toes, weird toes, "
+                           "2 body, 2 pussy, 2 upper, 2 lower, 2 head, 3 hand, 3 feet, 3 legs, extra long leg, super long leg, mirrored image, mirrored noise, "
+                           "(bad_prompt_version2:0.8), aged up, old,",
+        "cfg_scale": 11,
+        "steps": 20,
+        "sampler": "Euler"
+    },
+    "2:甜妹": {
+        "prompt": "(8k, RAW photo, best quality, masterpiece:1.2), Hight detail TAW colour photo, professional photograph, (realistic, photo-realistic:1.37), "
+                  "((best quality)), (cinematic light:1.4), (finely detailed face:1.2), (masterpiece:1.5), (best quality:1.2), (bokeh:1.2),   (full body:1.3), , "
+                  "close up:1.2,  (solo:1.3), ({{p}},:1.3),   "
+                  "white skin, (cute:1.3), detailed skin texture, glistening skin, detailed beautiful and delicate face:1.3,  narrow waist,  (real natural eyes:1.2) "
+                  "(perfect legs:1.0) <lora:cuteGirlMix4_v10:0.4> <lora:japaneseDollLikeness_v10:0.4> <lora:koreanDollLikeness_v10:0.2>",
+        "negative_prompt": "Easy Negative:1.4, Painting, cartoon, sketches, (worst quality:2), (low quality:2), (normal quality:2), ((monochrome:)), ((grayscales)), "
+                           "skin spots, acne, skin blemishes, age spots, (deformity), multiple breasts, (mutated hands and fingers:1.5 ), (long body:1.3), (mutation, "
+                           "poorly drawn:1.2) , bad anatomy, malformed, mutated, anatomical nonsense, QR code, bar code, censored, beard, mosaic, excrement, faeces, "
+                           "shit, extra limbs, low contrast, draft, tiling, fat, big hip, short legs:1.25, fused fingers, twisted legs, child 2 girls:2, (cross eyes:1.2) "
+                           "(big head:1.2), (3 legs 3 thigh 3 calf:1.5),",
+        "cfg_scale": 7.5,
+        "steps": 21,
+        "sampler": "Euler",
+        "model": "chilloutmix_NiPrunedFp32Fix.safetensors [fc2511737a]"
+    },
+    "3:测试": {
+        "prompt": "(8k, RAW photo, best quality, masterpiece:1.2), Hight detail TAW colour photo, professional photograph, (realistic, photo-realistic:1.37), "
+                  "((best quality)), (cinematic light:1.4), (finely detailed face:1.2), (masterpiece:1.5), (best quality:1.2), (bokeh:1.2),   (full body:1.5), , "
+                  "close up:1.2,  (1girl, solo:1.3), ({{p}},:1.3),   "
+                  "white skin, (cute:1.3), detailed skin texture, glistening skin, detailed beautiful and delicate face:1.3,  narrow waist,  (real natural eyes:1.2) "
+                  "(perfect legs:1.3) <lora:cuteGirlMix4_v10:{{l1}}> <lora:japaneseDollLikeness_v10:{{l2}}> <lora:koreanDollLikeness_v10:{{l3}}>",
+        "negative_prompt": "Easy Negative:1.4, Painting, cartoon, sketches, (worst quality:2), (low quality:2), (normal quality:2), ((monochrome:)), ((grayscales)), "
+                           "skin spots, acne, skin blemishes, age spots, (deformity), multiple breasts, (mutated hands and fingers:1.5 ), (long body:1.3), (mutation, "
+                           "poorly drawn:1.2) , bad anatomy, malformed, mutated, anatomical nonsense, QR code, bar code, censored, beard, mosaic, excrement, faeces, "
+                           "shit, extra limbs, low contrast, draft, tiling, fat, big hip, short legs:1.25, fused fingers, twisted legs, child 2 girls:2, (cross eyes:1.2) "
+                           "(big head:1.2), (3 legs 3 thigh 3 calf:1.5),",
+        "cfg_scale": 7.5,
+        "steps": 21,
+        "sampler": "Euler",
+        "model": "chilloutmix_NiPrunedFp32Fix.safetensors [fc2511737a]"
+    },
+    "6:girl": {
+        "prompt": "a 19 years old girl, best quality, masterpiece, (realistic:1.2), full body,"
+                  "{{p}},"
+                  "<lora:randomCoserFaceCoser:0.5>, "
+                  # "<lora:japaneseDollLikeness_v10:{{l1}}>, <lora:koreandolllikeness_V20:{{l2}}>, "
+                  "real face, real skin, realistic face, realistic skin, rough skin",
+        "negative_prompt": "(low quality, worst quality:1.4), easynegative,fingers appear, "
+                           "fat, thin, bad fingers, unnatural fingers, bad hands, six fingers, short legs",
+        # "negative_prompt": "(big head), (fused body parts), (fusion shoes), (different size eyes), (weird perspective), "
+        #                    "(weird fingers), (strange palm), (extra legs), (extra shoes), (2 head), (cross-eyes), "
+        #                    "(extra arm),(extra hands),(3 hands),(extra fingers), (Lordless Finger),(too long fingers),",
+        "cfg_scale": 7,
+        "steps": 20,
+        "sampler": "Euler",
+        "model": "realdosmix_.safetensors"
+    }
+}
+
+
 def clear_msg():
     global user_datas
     values = []
 
-    namespace = redis_connect.get("namespace:bing")
-    print(namespace)
+    # namespace = redis_connect.get("namespace:bing")
+    # print(namespace)
     for k in user_datas:
         values.append("bing:" + str(user_datas[k]["jailbreakConversationId"]))
     print(values)

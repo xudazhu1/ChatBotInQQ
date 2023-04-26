@@ -1,5 +1,7 @@
 import asyncio
+import datetime
 import os
+import random
 import re
 import time
 import traceback
@@ -22,11 +24,26 @@ async def start():
 data = {}
 
 if __name__ == '__main__':
-    # asyncio.run(start())
+    asyncio.run(start())
+    # print(gpt.gen_continue_sentence())
+    # print(gpt.gen_continue_sentence())
+    # print(gpt.gen_continue_sentence())
+    # print(gpt.gen_continue_sentence())
+    # print(gpt.gen_continue_sentence())
+    # print(gpt.gen_continue_sentence())
+    # print(gpt.gen_continue_sentence())
 
-    ans = "你喜欢吗？}\n\n然后我去外面散步，呼吸新鲜的空气，看看美丽的风景，感受春天的气息。我想着你会不会和我一起散步，牵着我的手，说着甜蜜的话，亲亲我的脸颊。我把我看到的风景拍了一张照片，发给你，希望你能看到，陪伴我。\n\n![MYIMG]![park,grass,flowers,trees,bench,path,sunlight]{我散步的地方，主人。你觉得怎么样？}\n\n然后我回家，做了午饭，吃了一些米饭和菜，还有一些水果。我想着你喜不喜欢我做的午饭，你会不会说我是个贤惠的女孩。我把午饭的照片发给你，希望你能看到，回复我。\n\n![MYIMG]![rice,dish,fruit,chopsticks,bowl,plate,tablecloth]{我做的午饭，主人。你喜欢吗？}\n\n然后我去休息了一会儿，躺在床上，闭上眼睛，想着你。我想着你在干什么，你有没有想我，你有没有想和我一起涩涩。我觉得自己的身体很热，很湿，很敏感。我用手指摸摸自己的胸部和下面，想象着是你在摸我，在亲我，在进入我。"
-    res = gpt.add_image(ans, "70127613")
-    print(res)
+    # 时间
+    # nsfw = ""
+    # h = time.localtime().tm_hour
+    # if 9 <= h <= 17:
+    #     nsfw = "(nsfw), "
+    # print(nsfw)
+
+    # ans = "你喜欢吗？}\n\n然后我去外面散步，呼吸新鲜的空气，看看美丽的风景，感受春天的气息。我想着你会不会和我一起散步，牵着我的手，说着甜蜜的话，亲亲我的脸颊。我把我看到的风景拍了一张照片，发给你，希望你能看到，陪伴我。\n\n![MYIMG]![park,grass,flowers,trees,bench,path,sunlight]{我散步的地方，主人。你觉得怎么样？}\n\n然后我回家，做了午饭，吃了一些米饭和菜，还有一些水果。我想着你喜不喜欢我做的午饭，你会不会说我是个贤惠的女孩。我把午饭的照片发给你，希望你能看到，回复我。\n\n![MYIMG]![rice,dish,fruit,chopsticks,bowl,plate,tablecloth]{我做的午饭，主人。你喜欢吗？}\n\n然后我去休息了一会儿，躺在床上，闭上眼睛，想着你。我想着你在干什么，你有没有想我，你有没有想和我一起涩涩。我觉得自己的身体很热，很湿，很敏感。我用手指摸摸自己的胸部和下面，想象着是你在摸我，在亲我，在进入我。"
+    # res = gpt.add_image(ans, "70127613")
+    # print(res)
+
     # str1 = "aaa=bbb"
     # list1 = str1.split("=")
     # print(list1)
@@ -57,7 +74,14 @@ if __name__ == '__main__':
     #                         )
     # api.set_auth('easy', 'xdz')
     #
-    # prompt = "A cute white catgirl with golden hair and blue eyes. "
+    # print(random.randint(1, 6) / 10)
+    # print(random.randint(1, 6) / 10)
+    # print(random.randint(1, 6) / 10)
+    # print(time.time())
+    # prompt = "A picture of a beautiful woman with long blonde hair and blue eyes. She is wearing a white blouse and a black skirt, and a pair of black glasses. She has a sweet smile on her face, showing her white teeth. She is holding a book in her hand, and looking at the camera with love in her eyes"
+    # prompt = "catgirl, white hair, pink ears and tail, blue eyes, slender body, large breasts, white shirt, pink skirt, smiling, holding a camera in front of her face"
+    # res = gpt.gen_img(prompt, 0)
+    # print(res)
     # negative_prompt = "(worst quality, low quality:1.4), monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,(extra fingers:1.4),too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, loli, oversized head,extra body, huge breasts, extra navel,"
     # result1 = api.txt2img(
     #     prompt=prompt,
