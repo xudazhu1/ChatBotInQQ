@@ -386,7 +386,7 @@ async def send_bing_py(prompt: str, userid: str):
             user_datas[userid]["userid"] = userid
             print('发送Data：', user_datas[userid])
             tag = tag + 1
-            if user_datas[userid]["jailbreakConversationId"]:
+            if str(user_datas[userid]["jailbreakConversationId"]) == "True":
                 NewBingAI.reset(userid)
             res = await NewBingAI.send_to_sydney(user_datas[userid]["message"], userid, user_datas[userid]["toneStyle"])
             if res.get("error"):

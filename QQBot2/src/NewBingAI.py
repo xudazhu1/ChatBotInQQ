@@ -84,7 +84,7 @@ def reset(userid):
         key_suffix = datetime.now().strftime("_%d/%m/%Y_%H-%M-%S")
         redis_connect.set("bing-py:" + userid + key_suffix, previous_messages_temp)
         redis_connect.delete("bing-py:" + userid)
-
+    print(f"{userid}的历史消息已清除")
 
 def previous_messages_format(userid, msg):
     # 思路是用redis存, 每个userid一个key key格式 "userid-py-uuid"
