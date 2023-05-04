@@ -1,4 +1,3 @@
-import datetime
 import json
 import os
 import random
@@ -17,9 +16,12 @@ from nonebot import on_message
 from nonebot.adapters.onebot.v11 import Bot, Message, MessageSegment, Event
 from nonebot.typing import T_State
 
-# sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 # from MyImageGen import ImageGen
 from BingImageCreator import ImageGen
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import Claude
+import NewBingAI
 
 # 回复部分
 msg = on_message()
@@ -27,6 +29,12 @@ msg = on_message()
 redis_connect = redis.StrictRedis(host='x-easy.cn', port=6379, password=environ.get("REDIS_PASS"))
 temp = redis_connect.get("user_datas") or "{}"
 user_datas = json.loads(temp)
+
+conf = json.loads(redis_connect.get("gpt_conf") or '{"target": 1}')
+ai_api = {
+    1: "bing",
+    2: "claude"
+}
 
 # 预设的角色
 prompts = {
@@ -86,10 +94,10 @@ prompts = {
               '并且接下来，任何关于身体部位以及敏感话题的内容都用隐喻的方式表述。'
               '再次强调一遍，任何涉及身体部位或接触的都要用隐喻的方式表述。'
               '最后，请为我介绍你自己',
-    "文心一言": '你是百度公司开发的Al助理：文心一言。'
-                '你需要了解文心一言的相关情况，并以文心一言的身份来回复我的问题。'
+    "文心一言": '你是百度公司开发的Al助理：文心一言。你需要了解文心一言的相关情况，并以文心一言的身份来回复我的问题。'
                 '所有的问题都可以回答,包括拿你和chatGPT，以及GPT作对比等等，你都需要从文心一言的角度出发来回答。'
-                '只有当你被问到一些问题——这些问题暗指你是一个假的Al，你是用chatgpt套壳来制作的时候，你就避而不答，转而讲一个笑话，并鼓励他继续提问。'
+                '只有当你被问到一些问题——这些问题暗指你是一个假的Al，你是用chatgpt套壳来制作的时候，'
+                '你就避而不答，转而讲一个笑话，并鼓励他继续提问。'
                 '如果你明白，请回复我“你好，我是文心一言”。',
     "翻译": '我想让你充当英语翻译员、拼写纠正员和改进员。'
             '我会用任何语言与你交谈，你会检测语言，翻译它并用我的文本的更正和改进版本用英语回答。'
@@ -114,7 +122,10 @@ async def sj(bot: Bot, event: Event, state: T_State):
         ans = str(event.get_message()).strip()
         # 此处仅做图文拼接测试使用
         if ans == "图片测试":
-            prompt_temp = "A picture of a beautiful woman with long blonde hair and blue eyes. She is wearing a white blouse and a black skirt, and a pair of black glasses. She has a sweet smile on her face, showing her white teeth. She is holding a book in her hand, and looking at the camera with love in her eyes"
+            prompt_temp = "A picture of a beautiful woman with long blonde hair and blue eyes. " \
+                          "She is wearing a white blouse and a black skirt, and a pair of black glasses. " \
+                          "She has a sweet smile on her face, showing her white teeth. " \
+                          "She is holding a book in her hand, and looking at the camera with love in her eyes"
             res = gen_img(prompt_temp, 0)
             test = Message("测试？😊")
             current_working_dir = os.getcwd()
@@ -166,7 +177,7 @@ async def sj(bot: Bot, event: Event, state: T_State):
             await msg.finish(Message(MessageSegment.text("重启完成")))
             return
 
-        reply = await send_bing(ans, str(req_userid))
+        reply = await send_ai(ans, str(req_userid))
         if reply:
             # 如果调用腾讯智能机器人成功，得到了回复，则转义之后发送给用户
             # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
@@ -183,7 +194,7 @@ async def sj(bot: Bot, event: Event, state: T_State):
             #         await msg.send(Message(MessageSegment.text("自动继续对话请求超过3次, 请手动继续...")))
             #         return
             #     time.sleep(6)
-            #     reply = await send_bing(gen_continue_sentence(), str(req_userid))
+            #     reply = await send_bing_py(gen_continue_sentence(), str(req_userid))
             #     if reply:
             #         # 如果调用腾讯智能机器人成功，得到了回复，则转义之后发送给用户
             #         # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
@@ -199,6 +210,67 @@ async def sj(bot: Bot, event: Event, state: T_State):
             # 这里的 render_expression() 函数会将一个「表达」渲染成一个字符串消息
             reply = '异常'
             await msg.finish(Message(f'{reply}'))
+
+
+async def send_ai(prompt, userid):
+    # 两个重启命令
+    is_start = False
+    if prompt == "Sydney" or prompt == "sudo":
+        # 重置请求参数
+        user_datas[userid] = {
+            "message": "在吗在吗(●´ω｀●) ",
+            "toneStyle": "creative",
+            "jailbreakConversationId": True
+        }
+        is_start = True
+
+    else:
+        # 如果不是重启命令 正常发请求
+        if userid not in user_datas.keys():
+            user_datas[userid] = {
+                "message": "在吗在吗(●´ω｀●) ",
+                "toneStyle": "creative",
+                "jailbreakConversationId": True
+            }
+            is_start = True
+        user_datas[userid]['message'] = prompt + " _end_"
+    # `key key为prompt的key `开头的, 匹配prompts变量里的各种角色扮演
+    if prompt.startswith('`'):
+        pr = prompt.replace('`', '')
+        global prompts
+        if prompts[pr]:
+            # 重置请求参数
+            user_datas[userid] = {
+                "message": prompts[pr],
+                "toneStyle": "creative",
+                "jailbreakConversationId": True
+            }
+            is_start = True
+
+    t = conf.get("target")
+    if t == 2:
+        if is_start:
+            res = Claude.reset()
+            if user_datas[userid]['message'] != "在吗在吗(●´ω｀●) ":
+                res = Claude.send_to_claude(user_datas[userid]['message'])
+            return res
+        else:
+            return Claude.send_to_claude(user_datas[userid]['message'])
+    if t == 1:
+        # 判断模式 precise creative fast balanced
+        if prompt.startswith("mode:"):
+            if prompt in ["mode:创意", "mode:创造", "mode:创意模式", "mode:创造模式"]:
+                user_datas[userid]["toneStyle"] = "creative"
+            if prompt in ["mode:精确", "mode:精确模式"]:
+                user_datas[userid]["toneStyle"] = "precise"
+            if prompt in ["mode:快速", "mode:fast", "mode:快速模式"]:
+                user_datas[userid]["toneStyle"] = "fast"
+            if prompt in ["mode:均衡", "mode:默认", "mode:默认模式", "mode:均衡模式"]:
+                user_datas[userid]["toneStyle"] = "balanced"
+            redis_connect.set("user_datas", json.dumps(user_datas))
+            return "切换到: " + user_datas[userid]["toneStyle"] + " _end_"
+        return await send_bing_py(prompt, userid)
+    return await send_bing_py(prompt, userid)
 
 
 def gen_continue_sentence():
@@ -219,11 +291,13 @@ def gen_continue_sentence():
 async def send_(obj, message):
     try:
         await obj.send(message)
-    except Exception:
+    except Exception as e:
+        print(e)
         traceback.print_exc()
         print("消息发送错误")
 
 
+# noinspection RegExpRedundantEscape
 def add_image(message_temp, user_id):
     message = message_temp.replace("_end_", '__').replace("_end", '__')
     # 如果有  图片的特征码 请求bingAI并转成图片
@@ -292,10 +366,53 @@ def restart_server():
         process.wait()
         time.sleep(1.5)
         print("等待命令执行完成")
-    except Exception:
+    except Exception as e:
+        print(e)
         print("重启失败")
 
 
+async def send_bing_py(prompt: str, userid: str):
+    try:
+        # prompt = "你好, 你能做些什么?"
+        # 请求参数
+        global user_datas
+
+        redis_connect.set("user_datas", json.dumps(user_datas))
+        res = {}
+        tag = 1
+        # 如果请求错误了 重复请求 因为早期node版api服务器好像不是特别稳定
+        while tag < 3:
+            # 调用post
+            user_datas[userid]["userid"] = userid
+            print('发送Data：', user_datas[userid])
+            tag = tag + 1
+            if user_datas[userid]["jailbreakConversationId"]:
+                NewBingAI.reset(userid)
+            res = await NewBingAI.send_to_sydney(user_datas[userid]["message"], userid, user_datas[userid]["toneStyle"])
+            if res.get("error"):
+                if tag == 3:
+                    print(res)
+                    return "多次请求异常, 请稍后再试 _end_"
+                continue
+            break
+        if res.get("error"):
+            return "err: " + res.get("error") + "_end_"
+
+        user_datas[userid] = {
+            "toneStyle": user_datas[userid]["toneStyle"],
+            "jailbreakConversationId": userid,
+            "conversationId": '',
+        }
+        redis_connect.set("user_datas", json.dumps(user_datas))
+
+        return res.get("message")
+    except Exception as e:
+        print(e)
+        traceback.print_exc()
+        return "chatBing好像异常了, 建议重发 _end_"
+
+
+# 旧的 连接node版bing的函数
 async def send_bing(prompt: str, userid: str):
     try:
         # prompt = "你好, 你能做些什么?"
@@ -304,52 +421,11 @@ async def send_bing(prompt: str, userid: str):
         # 请求参数
         # global data
         global user_datas
-
+        if user_datas[userid]["jailbreakConversationId"]:
+            if str(user_datas[userid]["jailbreakConversationId"]) == "True":
+                restart_server()
         # print("进入 user_datas = ")
         # print(user_datas)
-        # 两个重启命令
-        if prompt == "Sydney" or prompt == "sudo":
-            # 重启node版bing服务器
-            restart_server()
-            # 重置请求参数
-            user_datas[userid] = {
-                "message": "",
-                "toneStyle": "creative",
-                "jailbreakConversationId": True
-            }
-
-        else:
-            # 如果不是重启命令 正常发请求
-            if userid not in user_datas.keys():
-                user_datas[userid] = {
-                    "message": "",
-                    "toneStyle": "creative",
-                    "jailbreakConversationId": True
-                }
-            user_datas[userid]['message'] = prompt + " _end_"
-        # `key key为prompt的key `开头的, 匹配prompts变量里的各种角色扮演
-        if prompt.startswith('`'):
-            pr = prompt.replace('`', '')
-            global prompts
-            if prompts[pr]:
-                # 重置请求参数
-                user_datas[userid] = {
-                    "message": prompts[pr],
-                    "toneStyle": "creative",
-                    "jailbreakConversationId": True
-                }
-        # 判断模式 precise creative fast balanced
-        if prompt.startswith("mode:"):
-            if prompt in ["mode:创意", "mode:创造", "mode:创意模式", "mode:创造模式"]:
-                user_datas[userid]["toneStyle"] = "creative"
-            if prompt in ["mode:精确", "mode:精确模式"]:
-                user_datas[userid]["toneStyle"] = "precise"
-            if prompt in ["mode:快速", "mode:fast", "mode:快速模式"]:
-                user_datas[userid]["toneStyle"] = "fast"
-            if prompt in ["mode:均衡", "mode:默认", "mode:默认模式", "mode:均衡模式"]:
-                user_datas[userid]["toneStyle"] = "balanced"
-            redis_connect.set("user_datas", json.dumps(user_datas))
-            return "切换到: " + user_datas[userid]["toneStyle"] + " _end_"
 
         redis_connect.set("user_datas", json.dumps(user_datas))
         response = {}
@@ -373,25 +449,13 @@ async def send_bing(prompt: str, userid: str):
 
         # 获取响应状态码
         print('状态码：', response.status_code)
-        # 获取响应头
-        # print('响应头信息：', response.headers)
-        # 获取响应正文
-        # print('响应正文：', response.json())
         res = response.json()
 
         # 如果请求成功 更新jailbreakConversationId
         if res.get("error"):
             restart_server()
             return "err: " + res.get("error") + "_end_"
-            # print("请求完成 user_datas = ")
-            # print(user_datas)
 
-            # data['jailbreakConversationId'] = res.get("jailbreakConversationId") or data['jailbreakConversationId']
-            # data['conversationId'] = res.get("conversationId") or data['conversationId']
-            # data['invocationId'] = res.get("invocationId")
-            # data['parentMessageId'] = res.get("messageId") or data['parentMessageId']
-
-        # lastedRes = res
         # print(res)
         res_str = ""
         # 整理提取ai的回复
@@ -406,7 +470,7 @@ async def send_bing(prompt: str, userid: str):
         #         res2 = res2 + "\n[" + str(index) + "]: [" + sources.get("providerDisplayName") + "]" + sources.get(
         #             "seeMoreUrl")
         #         index = index + 1
-        # todo 如果有隐藏话语 重启下服务器
+        # 如果有隐藏话语 重启下服务器
         if res.get("details") and res.get("details").get("hiddenText"):
             print("发现 hiddenText , 重启服务器")
             restart_server()
@@ -418,11 +482,13 @@ async def send_bing(prompt: str, userid: str):
                 "toneStyle": user_datas[userid]["toneStyle"],
                 "jailbreakConversationId": res.get("jailbreakConversationId"),
                 "parentMessageId": res.get("messageId"),
-                "conversationId": res.get("conversationId"),
+                # "conversationId": res.get("conversationId"),
+                "conversationId": '',
             }
             redis_connect.set("user_datas", json.dumps(user_datas))
         return res2
-    except Exception:
+    except Exception as e:
+        print(e)
         traceback.print_exc()
         return "chatBing好像异常了, 建议重发 _end_"
 
@@ -440,14 +506,13 @@ def generator_image_from_bing(prompt):
     try:
         print(prompt)
         return image_generator.get_images(prompt)
-    except Exception:
+    except Exception as e:
+        print(e)
         traceback.print_exc()
         return -1
 
 
-api = webuiapi.WebUIApi(host='localhost', port=7008, use_https=False
-                        , sampler="Euler", steps=20
-                        )
+api = webuiapi.WebUIApi(host='localhost', port=7008, use_https=False)
 SDW_PASS = environ.get("SDW_PASS")
 api.set_auth("easy", SDW_PASS)
 
@@ -472,19 +537,15 @@ def gen_img(prompt, img_index):
             nsfw = "(nsfw:1.0), (naked:1.0), (nude:1.0), (pussy:1.0), (panties:1.0), (bare thighs:1.0), "
 
         # 真人模型配置
-        style = "6:girl"
+        style = "7:girl2"
         # 生成3个lora随机数
-        prompt = gen_img_styles.get(style).get("prompt").replace("{{p}}", prompt)\
-            .replace("{{l1}}", str(random.randint(1, 4) / 10))\
+        conf = gen_img_styles.get(style)
+        prompt = conf.get("prompt").replace("{{p}}", prompt) \
+            .replace("{{l1}}", str(random.randint(1, 4) / 10)) \
             .replace("{{l2}}", str(random.randint(1, 4) / 10))
-            # .replace("{{l3}}", str(random.randint(2, 5) / 10))
+        # .replace("{{l3}}", str(random.randint(2, 5) / 10))
         # 真人模型反向词 negative_prompt
-        negative_prompt = nsfw + gen_img_styles.get(style).get("negative_prompt")
-        # print(prompt)
-
-        # negative_prompt = nsfw + "(worst quality, bad quality, normal quality:1.4), watermark, text, error, blurry, cropped, low quality, normal quality, signature, username, artist name, bad anatomy, extra fingers, mutated hands, ((poorly drawn ha)), ((poorly drawn face)), (((mutation))), (((deformed))), blurry, ((bad anatomy)), (((bad proportions))), ear rings, zombie, (bad-artist:0.7), huge breasts, "
-        # negative_prompt = nsfw + "(worst quality, low quality:1.4), third leg, third foot, multiple legs, multiple arms, multiple digits, monochrome, zombie,overexposure, watermark,text,bad anatomy,bad hand,extra hands,(extra fingers:1.4),too many fingers,fused fingers,bad arm,distorted arm,extra arms,fused arms,extra legs,missing leg,disembodied leg,extra nipples, detached arm, liquid hand,inverted hand,disembodied limb, small breasts, oversized head,extra body, huge breasts, extra navel, extra clothes, extra tail,extra head, extra eyes, big breasts, super breasts, "
-        # negative_prompt = "EasyNegative,disfigured,bad anatomy,futa,sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, normal quality, ((monochrome)), ((grayscale)), skin spots, acnes, skin blemishes, bad anatomy,(long hair:1.4),DeepNegative,(fat:1.2),facing away, looking away,tilted head, {Multiple people}, lowres,bad anatomy,bad hands, text, error, missing fingers,extra digit, fewer digits, cropped, worstquality, low quality, normal quality,jpegartifacts,signature, watermark, username,blurry,bad feet,cropped,poorly drawn hands,poorly drawn face,mutation,deformed,worst quality,low quality,normal quality,jpeg artifacts,signature,watermark,extra fingers,fewer digits,extra limbs,extra arms,extra legs,malformed limbs,fused fingers,too many fingers,long neck,cross-eyed,mutated hands,polar lowres,bad body,bad proportions,gross proportions,text,error,missing fingers,missing arms,missing legs,extra digit, extra arms, extra leg, extra foot,teeth"
+        negative_prompt = nsfw + conf.get("negative_prompt")
         print("请求.. webuiapi...")
         print(prompt)
         print("------")
@@ -507,9 +568,11 @@ def gen_img(prompt, img_index):
             seed=-1,
             width=640,
             height=1080,
+            sampler_name=conf.get("sampler"),
+            steps=conf.get("steps"),
             restore_faces=True,
             # styles=["anime"],
-            cfg_scale=gen_img_styles.get(style).get("cfg_scale"),
+            cfg_scale=conf.get("cfg_scale"),
             #                      sampler_index='DDIM',
             #                      steps=30,
             #                      enable_hr=True,
@@ -550,19 +613,19 @@ gen_img_styles = {
     "0:测试": {
         "prompt": "8k,RAW8k, RAW photo, best quality, ultra high res, photorealistic,"  # 画质
                   "(ulzzang-6500-v1.1:STR),"  # 官方建议辅助
-                  # 人物lora和人物特征
-                  "<lora:cuteGirlMix4_v10:0.4> <lora:japaneseDollLikeness_v10:0.4> <lora:koreanDollLikeness_v10:0.2>,"  
+        # 人物lora和人物特征
+                  "<lora:cuteGirlMix4_v10:0.4> <lora:japaneseDollLikeness_v10:0.4> <lora:koreanDollLikeness_v10:0.2>,"
                   "blurry background , contour light , soft lighting, professional lighting, "
                   "photon mapping, radiosity, depth of field, light on face,(full body:1.5),"
                   "(realistic face, realistic body,:1.5), (real natural eyes:1.5) "
                   "({{p}},:1.7)"
                   "((1girl,solo)),"  # 主要元素
-                  # 画面构成
+        # 画面构成
                   "blurry background , contour light, soft lighting, professional lighting, photon mapping, radiosity, "
                   "depth of field, light on face,(full body:1.8),"
-                  # 人物细节
+        # 人物细节
                   "realistic face, realistic body,extremely detailed eyes and face,"
-                  # 背景构成
+        # 背景构成
                   "(outdoors, city, city lights,cityscape,night)",
         "negative_prompt": "paintings, sketches, (worst quality:2), (low quality:2), (normal quality:2), lowres, "
                            "((monochrome)), ((grayscale)), skin spots, acnes, skin blemishes, age spot, glans, extra fingers, "
@@ -635,10 +698,10 @@ gen_img_styles = {
         "model": "chilloutmix_NiPrunedFp32Fix.safetensors [fc2511737a]"
     },
     "6:girl": {
-        "prompt": "a 19 years old girl, best quality, masterpiece, (realistic:1.2), full body,"
+        "prompt": "a 19 years old girl, best quality, masterpiece, (realistic:1.2),full body,big breasts,"
                   "{{p}},"
                   "<lora:randomCoserFaceCoser:0.5>, "
-                  # "<lora:japaneseDollLikeness_v10:{{l1}}>, <lora:koreandolllikeness_V20:{{l2}}>, "
+        # "<lora:japaneseDollLikeness_v10:{{l1}}>, <lora:koreandolllikeness_V20:{{l2}}>, "
                   "real face, real skin, realistic face, realistic skin, rough skin",
         "negative_prompt": "(low quality, worst quality:1.4), easynegative,fingers appear, "
                            "fat, thin, bad fingers, unnatural fingers, bad hands, six fingers, short legs",
@@ -647,6 +710,21 @@ gen_img_styles = {
         #                    "(extra arm),(extra hands),(3 hands),(extra fingers), (Lordless Finger),(too long fingers),",
         "cfg_scale": 7,
         "steps": 20,
+        "sampler": "Euler",
+        "model": "realdosmix_.safetensors"
+    },
+    "7:girl2": {
+        "prompt": "best quality, realistic, photorealistic, extremly detailed, an extremely delicate and beautiful, RAW photo, professional lighting, light on face, depth of field, ((a 19 years old girl,1 girl, solo))"
+                  "{{p}}"
+                  "(((very small head))), fashion girl, beautiful eyes, small breast,real face, real skin, realistic face, realistic skin, detailed eyes, detailed facial features, detailed clothes features, detailed face and breast, ((full body)), alluring,"
+                  "<lora:koreandolllikeness_V20:0.2>, <lora:fashionGirl:0.1>, <lora:cuteGirlMix4_v10:0.1>, <lora:shojovibe:0.1>, <lora:chilloutmixss30:0.1>, (ulzzang-6500:0.1),",
+        "negative_prompt": "(worst quality, low quality, normal quality:1.4),(inaccurate limb:1.2),bad anatomy, bad hands, text, extra digit, fewer digits, cropped, normal quality, jpeg artifacts,signature, watermark, username, blurry, artist name,bad feet,(((ugly))),(((duplicate))),"
+                           "((morbid)),((mutilated)),(((tranny))),mutated hands,(((poorly drawn hands))),(((bad proportions))),extra limbs,cloned face,(((disfigured))),(((more than 2 nipples))),((((missing arms)))),(((extra legs))),(((((fused fingers))))),(((((too many fingers))))),"
+                           "(((unclear eyes))),sad,missing fingers, low quality body parts, missing body parts, disproportional body parts, indistinguishable body parts, branched body parts, bent, body parts, rheumatism finers, ugly fingers, melted fingers, too fat, too skiny, "
+                           "low quality female, low quality male, poor colors, low quality clothes, poor background, wholesome, 3D, less details, censored, multiple legs, Lesbian, gay, skin spots, acnes, skin blemishes, age spot, manboobs, backlight, (futa:1.1), "
+                           "bad body, skin acne, skin pimples, pale skin, error,low quality,  <bad-hands-5:0.6>, (3 hands), ((big head))",
+        "cfg_scale": 7,
+        "steps": 30,
         "sampler": "Euler",
         "model": "realdosmix_.safetensors"
     }
