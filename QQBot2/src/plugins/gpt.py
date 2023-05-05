@@ -1,3 +1,7 @@
+import nest_asyncio
+
+nest_asyncio.apply()
+import asyncio
 import json
 import os
 import random
@@ -22,6 +26,7 @@ from BingImageCreator import ImageGen
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 import Claude
 import NewBingAI
+import MyTread
 
 # 回复部分
 msg = on_message()
@@ -120,8 +125,9 @@ async def sj(bot: Bot, event: Event, state: T_State):
     # print(event.__getattribute__("message_type"))
     if event.is_tome():
         ans = str(event.get_message()).strip()
-        # 此处仅做图文拼接测试使用
-        if ans == "图片测试":
+
+        def image_gen():
+            print("我是回调! 我被调用了!!!")
             prompt_temp = "A picture of a beautiful woman with long blonde hair and blue eyes. " \
                           "She is wearing a white blouse and a black skirt, and a pair of black glasses. " \
                           "She has a sweet smile on her face, showing her white teeth. " \
@@ -132,7 +138,27 @@ async def sj(bot: Bot, event: Event, state: T_State):
             # test.append(MessageSegment.image("file://" + current_working_dir + "/test.png"))
             for url in res:
                 test.append(MessageSegment.image("file://" + current_working_dir + "/" + url))
-            await msg.finish(test)
+            # await msg.finish(test)
+            return test
+
+        # 此处仅做图文拼接测试使用
+        if ans == "图片测试":
+            await msg.finish(image_gen())
+            return
+        if ans == "回调测试":
+            index = 0
+            t_list = []
+            while index < 2:
+                t = MyTread.threadByFuture(image_gen)
+                # t = MyTread.threadByFuture(lambda: await image_gen())
+                t_list.append(t)
+                time.sleep(3)
+                index = index + 1
+            await msg.send(Message('任务发布完成'))
+            for t1 in t_list:
+                await msg.send(t1.result())
+                print(f"---------------任务{t1}执行完成-----------------")
+            await msg.finish(Message("任务执行完成!"))
             return
 
         # 通过封装的函数获取腾讯智能机器人机器人的回复
@@ -177,42 +203,45 @@ async def sj(bot: Bot, event: Event, state: T_State):
             await msg.finish(Message(MessageSegment.text("重启完成")))
             return
 
-        reply = await send_ai(ans, str(req_userid))
-        if reply:
-            # 如果调用腾讯智能机器人成功，得到了回复，则转义之后发送给用户
-            # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
-            if event.__getattribute__("message_type") == "private":
-                # await cici.finish(Message(f'{reply}'))
-                await send_(msg, add_image(reply, 0))
+        async def call(res_msg):
+            print(f"收到回复-------------------------------------------:\n{res_msg}")
+            if res_msg:
+                # 如果调用腾讯智能机器人成功，得到了回复，则转义之后发送给用户
+                # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
+                if event.__getattribute__("message_type") == "private":
+                    # await cici.finish(Message(f'{res_msg}'))
+                    await send_(msg, add_image(res_msg, 0))
+                else:
+                    await send_(msg, add_image(res_msg, event.get_user_id()))
+                # 这里判断ai的话是否讲完, 没讲完可能被审核截胡了
+                # index = 0
+                # while "_end" not in res_msg:
+                #     index = index + 1
+                #     if index >= 3:
+                #         await msg.send(Message(MessageSegment.text("自动继续对话请求超过3次, 请手动继续...")))
+                #         return
+                #     time.sleep(6)
+                #     res_msg = await send_bing_py(gen_continue_sentence(), str(req_userid))
+                #     if res_msg:
+                #         # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
+                #         if event.__getattribute__("message_type") == "private":
+                #             # await cici.finish(Message(f'{res_msg}'))
+                #             await send_(msg, add_image(res_msg, 0))
+                #         else:
+                #             await send_(msg, add_image(res_msg, event.get_user_id()))
+                return
+
             else:
-                await send_(msg, add_image(reply, event.get_user_id()))
-            # 这里判断ai的话是否讲完, 没讲完可能被审核截胡了
-            # index = 0
-            # while "_end" not in reply:
-            #     index = index + 1
-            #     if index >= 3:
-            #         await msg.send(Message(MessageSegment.text("自动继续对话请求超过3次, 请手动继续...")))
-            #         return
-            #     time.sleep(6)
-            #     reply = await send_bing_py(gen_continue_sentence(), str(req_userid))
-            #     if reply:
-            #         # 如果调用腾讯智能机器人成功，得到了回复，则转义之后发送给用户
-            #         # 转义会把消息中的某些特殊字符做转换，避免将它们理解为 CQ 码
-            #         if event.__getattribute__("message_type") == "private":
-            #             # await cici.finish(Message(f'{reply}'))
-            #             await send_(msg, add_image(reply, 0))
-            #         else:
-            #             await send_(msg, add_image(reply, event.get_user_id()))
-            return
+                # 如果调用失败，或者它返回的内容我们目前处理不了，发送无法获取腾讯智能机器人回复时的「表达」
+                # 这里的 render_expression() 函数会将一个「表达」渲染成一个字符串消息
+                res_msg = '异常'
+                await msg.finish(Message(f'{res_msg}'))
 
-        else:
-            # 如果调用失败，或者它返回的内容我们目前处理不了，发送无法获取腾讯智能机器人回复时的「表达」
-            # 这里的 render_expression() 函数会将一个「表达」渲染成一个字符串消息
-            reply = '异常'
-            await msg.finish(Message(f'{reply}'))
+        reply = await send_ai(ans, str(req_userid), call)
+        await call(reply)
 
 
-async def send_ai(prompt, userid):
+async def send_ai(prompt, userid, callback=None):
     # 两个重启命令
     is_start = False
     if prompt == "Sydney" or prompt == "sudo":
@@ -269,8 +298,8 @@ async def send_ai(prompt, userid):
                 user_datas[userid]["toneStyle"] = "balanced"
             redis_connect.set("user_datas", json.dumps(user_datas))
             return "切换到: " + user_datas[userid]["toneStyle"] + " _end_"
-        return await send_bing_py(prompt, userid)
-    return await send_bing_py(prompt, userid)
+        return await send_bing_py(prompt, userid, callback)
+    return await send_bing_py(prompt, userid, callback)
 
 
 def gen_continue_sentence():
@@ -371,26 +400,42 @@ def restart_server():
         print("重启失败")
 
 
-async def send_bing_py(prompt: str, userid: str):
+async def send_bing_py(prompt: str, userid: str, callback=None):
     try:
         # prompt = "你好, 你能做些什么?"
         # 请求参数
         global user_datas
 
+        async def call_inner(res_v):
+            res_t: str
+            if res_v.get("error"):
+                res_t = "err: " + res_v.get("error") + "_end_"
+            res_t = res_v.get("message")
+            if callback:
+                if asyncio.iscoroutinefunction(callback):
+                    await callback(res_t)
+                else:
+                    callback(res_t)
+
         redis_connect.set("user_datas", json.dumps(user_datas))
         res = {}
         tag = 1
         # 如果请求错误了 重复请求 因为早期node版api服务器好像不是特别稳定
-        while tag < 3:
+        while tag < 2:
             # 调用post
             user_datas[userid]["userid"] = userid
             print('发送Data：', user_datas[userid])
             tag = tag + 1
             if str(user_datas[userid]["jailbreakConversationId"]) == "True":
                 NewBingAI.reset(userid)
-            res = await NewBingAI.send_to_sydney(user_datas[userid]["message"], userid, user_datas[userid]["toneStyle"])
+            if callback:
+                res = await NewBingAI.send_wrap(user_datas[userid]["message"], userid,
+                                                user_datas[userid]["toneStyle"], call_inner)
+            else:
+                res = await NewBingAI.send_wrap(user_datas[userid]["message"], userid,
+                                                user_datas[userid]["toneStyle"], callback)
             if res.get("error"):
-                if tag == 3:
+                if tag == 2:
                     print(res)
                     return "多次请求异常, 请稍后再试 _end_"
                 continue
