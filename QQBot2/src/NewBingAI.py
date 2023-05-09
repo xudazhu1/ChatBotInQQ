@@ -1,5 +1,7 @@
 import asyncio
 import json
+import re
+import time
 import traceback
 import uuid
 from datetime import datetime
@@ -65,11 +67,20 @@ def error(err_str):
 
 
 def success(bing_message, userid):
+    lasted = False
     message: str
     if type(bing_message) is str:
-        message = bing_message + "_^end^_"
+        lasted = True
+        message = bing_message
     else:
         message = bing_message["text"]
+    # 去掉消息首尾换行
+    pattern = r'^\n+'
+    pattern_end = r'\n+$'
+    # string = '\n\n\nToday is March 16th, 2023. \n The temperature is 25 degrees Celsius.\n\n\n\n\n\n'
+    message = re.sub(pattern, '', message)
+    message = re.sub(pattern_end, '', message)
+
     res = {
         "role": "Bing",
         "message": message,
@@ -80,6 +91,8 @@ def success(bing_message, userid):
     all_user_previous_messages[userid].append(res)
     # 成功的消息的话, 存入redis
     redis_connect.set("bing-py:" + userid, json.dumps(all_user_previous_messages[userid]))
+    if lasted:
+        res["message"] = res["message"] + "_^end^_"
     return res
 
 
@@ -91,6 +104,7 @@ def reset(userid):
         redis_connect.set("bing-py:" + userid + key_suffix, previous_messages_temp)
         redis_connect.delete("bing-py:" + userid)
     print(f"{userid}的历史消息已清除")
+
 
 def previous_messages_format(userid, msg):
     # 思路是用redis存, 每个userid一个key key格式 "userid-py-uuid"
@@ -108,15 +122,22 @@ def previous_messages_format(userid, msg):
     all_user_previous_messages[userid] = previous_messages_list
     res = ""
     for msg_temp in previous_messages_list:
+        msg_inner = msg_temp.get("message")
+        # 去掉消息首尾换行
+        pattern = r'^\n+'
+        pattern_end = r'\n+$'
+        # string = '\n\n\nToday is March 16th, 2023. \n The temperature is 25 degrees Celsius.\n\n\n\n\n\n'
+        msg_inner = re.sub(pattern, '', msg_inner)
+        msg_inner = re.sub(pattern_end, '', msg_inner)
         role = msg_temp.get("role")
         if role == 'user' or role == 'User':
-            res = res + f'[user](#message)\n{msg_temp.get("message")}'
+            res = res + f'[user](#message)\n{msg_inner}'
         if role == 'bot' or role == 'bing' or role == 'Bing':
             # 顺便把 details 清理一下 不然太难看
             msg_temp["details"] = ""
-            res = res + f'[assistant](#message)\n{msg_temp.get("message")}'
+            res = res + f'[assistant](#message)\n{msg_inner}'
         if role == 'system':
-            res = res + f'[system](#additional_instructions)\n- {msg_temp.get("message")}'
+            res = res + f'[system](#additional_instructions)\n- {msg_inner}'
         res = res + "\n\n\n"
     # 最后提醒bing以助手身份继续, 不然这玩意儿老自我介绍
     return res + "Continue the conversation as assistant....."
@@ -271,8 +292,8 @@ async def send_to_sydney(send_msg, userid, tone_style, callback=None, res_msg=No
     try:
         if proxy_type:
             ws.connect(url="wss://sydney.bing.com/sydney/ChatHub"
-                       ,http_proxy_host="localhost"
-                       ,http_proxy_port=7890
+                       , http_proxy_host="localhost"
+                       , http_proxy_port=7890
                        )
         else:
             ws.connect(url="wss://sydney.bing.com/sydney/ChatHub")
@@ -282,7 +303,9 @@ async def send_to_sydney(send_msg, userid, tone_style, callback=None, res_msg=No
         res_first = ws.recv()
         if str(res_first) == "{}":
             print("握手成功!!!")
+        # 发送首次心跳 并记录心跳时间
         ws.send('{"type": 6}')
+        send_time_last = datetime.timestamp(datetime.now())
         ws.send(send_data_dumps + "")
         print(f'发送 wss:{send_data_dumps}')
         flag = True
@@ -291,6 +314,11 @@ async def send_to_sydney(send_msg, userid, tone_style, callback=None, res_msg=No
         # 单张消息卡消息
         current_msg = ""
         while flag:
+            # 发送心跳 心跳间隔15s
+            time_now = datetime.timestamp(datetime.now())
+            if (time_now - send_time_last) > 12:
+                ws.send('{"type": 6}')
+                send_time_last = datetime.timestamp(datetime.now())
             resp = ws.recv()
             # print(f"wss:res={resp}")
             res_temp_list = str(resp).split("")
@@ -414,7 +442,8 @@ async def send_wrap(send_msg, userid, tone_style, callback=None):
     # 这是可能的消息卡线程 需要在主线程里面调用callback回调 不然回复不了消息
     res_msg = []
     # 开一个线程来进行wss请求 如果有回调 res_msg消息会在send_to_sydney里面被push消息
-    t = MyTread.threadByFuture(lambda: asyncio.new_event_loop().run_until_complete(send_to_sydney(send_msg, userid, tone_style, callback, res_msg)))
+    t = MyTread.threadByFuture(lambda: asyncio.new_event_loop().run_until_complete(
+        send_to_sydney(send_msg, userid, tone_style, callback, res_msg)))
     # 当线程没有执行完之前 一直循环读取 res_msg 里面的消息并进行回复
     while len(res_msg) or not t.done():
         # 如果里面有消息
@@ -425,7 +454,10 @@ async def send_wrap(send_msg, userid, tone_style, callback=None):
                 await callback(res)
             else:
                 callback(res)
+        time.sleep(1)
     return t.result()
+
+
 async def start():
     while 1:
         # local为userid 为每个不同的userid维护一组对话历史记录
