@@ -410,7 +410,10 @@ async def send_bing_py(prompt: str, userid: str, callback=None):
             res_t: str
             if res_v.get("error"):
                 res_t = "err: " + res_v.get("error") + "_end_"
-            res_t = res_v.get("message")
+            else:
+                res_t = res_v.get("message")
+                user_datas[userid]["jailbreakConversationId"] = userid
+                redis_connect.set("user_datas", json.dumps(user_datas))
             if callback:
                 if asyncio.iscoroutinefunction(callback):
                     await callback(res_t)
