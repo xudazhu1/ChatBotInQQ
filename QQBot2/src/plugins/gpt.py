@@ -434,11 +434,16 @@ async def send_bing_py(prompt: str, userid: str, callback=None):
             else:
                 res = await NewBingAI.send_wrap(user_datas[userid]["message"], userid,
                                                 user_datas[userid]["toneStyle"], callback)
-            if res.get("error"):
-                if tag == 2:
-                    print(res)
-                    return "多次请求异常, 请稍后再试 _end_"
-                continue
+            # 如果是异常中断的自动继续发送消息 ?
+            # if res.get("interrupt"):
+            #     await call_inner(res)
+            #     tag = 1
+            #     user_datas[userid]["message"] = "继续"
+            # if res.get("error"):
+            #     if tag == 2:
+            #         print(res)
+            #         return "多次请求异常, 请稍后再试 _end_"
+            #     continue
             break
         if res.get("error"):
             return "err: " + res.get("error") + "_end_"

@@ -28,13 +28,13 @@ default_system_msg = \
     'For each sentence, use a separate message card.' \
     'Answer using the Chinese as the user. \n\n' \
     'you can creating or generating images, If the user needs an image,  you must use the format of' \
-    ' "![MYIMG]![English keywords of pictures extracted from the perspective of professional painters, ' \
+    ' "![MYIMG]![[English keywords of pictures extracted from the perspective of professional painters, ' \
     ' and separated by commas,Extract each object contained in the picture, and the detail description of the object,' \
     'such as catgirl,detailed facial description,((appearance in double brackets)),body organs,' \
     '((clothing in double brackets)), expression, action, background, environment, ' \
     'or other descriptions that can see objects.' \
     'you need to add (!SD!) before the first keyword if it is a picture of a person or an anthropomorphic animal.' \
-    'Again, all keywords are in English format.]' \
+    'Again, all keywords are in English format.]]' \
     '{中文的图片说明}" ' \
     'Again, you must use this format to generate images, because users only support this format, ' \
     'Do not use DALL·E and bing image creator !!!'
@@ -66,7 +66,7 @@ def error(err_str):
     return {"error": err_str}
 
 
-def success(bing_message, userid):
+def success(bing_message, userid, interrupt=False):
     lasted = False
     message: str
     if type(bing_message) is str:
@@ -85,8 +85,10 @@ def success(bing_message, userid):
         "role": "Bing",
         "message": message,
         "time": datetime.now().strftime("%d/%m/%Y %H:%M:%S"),
-        "details": bing_message
+        "details": bing_message,
     }
+    if interrupt:
+        res["interrupt"] = True
     # 拼接消息记录后存入消息历史记录到redis
     all_user_previous_messages[userid].append(res)
     # 成功的消息的话, 存入redis
@@ -358,15 +360,16 @@ async def send_to_sydney(send_msg, userid, tone_style, callback=None, res_msg=No
                         messages_temp = arguments[0].get("messages")
                         msg_new = messages_temp[0].get('text')
                         # todo2 判断此消息是否? 应该不用判断了 因为有消息卡判断了
-                        current_msg = msg_new
+                        if msg_new:
+                            current_msg = msg_new
                 # type = 2 说明此次消息结束
                 if execute_result_dict.get("type") == 2:
                     # 拼接最后一次的current_msg
                     all_messages = f"{all_messages}{current_msg}"
                     # 判断是否重复 介绍自己 是的话 放弃此次对话
-                    if "你的AI" in all_messages:
-                        print("常规错误, 系统在重复介绍自己!!!")
-                        return error("常规错误, 系统在重复介绍自己!!!")
+                    # if "你的AI" in all_messages:
+                    #     print("常规错误, 系统在重复介绍自己!!!")
+                    #     return error("常规错误, 系统在重复介绍自己!!!")
                     if execute_result_dict.get("item") and execute_result_dict.get("item").get("result") \
                             and execute_result_dict.get("item").get("result").get("value") == 'InvalidSession':
                         return error(f'无效会话:{execute_result_dict.get("item").get("result").get("message")}')
@@ -385,7 +388,7 @@ async def send_to_sydney(send_msg, userid, tone_style, callback=None, res_msg=No
                             event_message["text"] = all_messages
                             # 拼接完成 返回
                             if callback:
-                                return success(current_msg, userid)
+                                return success(current_msg, userid, interrupt=True)
                             else:
                                 return success(event_message, userid)
 
@@ -397,11 +400,14 @@ async def send_to_sydney(send_msg, userid, tone_style, callback=None, res_msg=No
                     if event_message.get("author") != 'bot':
                         return error(f'Unexpected message author:{event_message["author"]}.{event_message["text"]}')
                     if break_tag or execute_result_dict["item"]["messages"][0].get("topicChangerText") \
+                            or execute_result_dict["item"]["messages"][0].get("hiddenText") \
                             or execute_result_dict["item"]["messages"][0].get("offense") == "OffenseTrigger":
                         # 如果目前什么文本都没有
                         if "" == all_messages and "" == current_msg:
                             return error(
                                 '[Error: The moderation filter triggered. Try again with different wording.]')
+                        if callback and current_msg and current_msg != "":
+                            return success(current_msg, userid, interrupt=True)
                         event_message.get("adaptiveCards")[0].get("body")[0]["text"] = all_messages
                         event_message["text"] = all_messages
                     event_message["text"] = all_messages
@@ -425,9 +431,9 @@ async def send_to_sydney(send_msg, userid, tone_style, callback=None, res_msg=No
                         # return success(res_data, userid)
                         # 拼接完成 返回
                         if callback:
-                            return success(current_msg, userid)
+                            return success(current_msg, userid, interrupt=True)
                         else:
-                            return success(res_data, userid)
+                            return success(res_data, userid, interrupt=True)
                     else:
                         return error("Connection closed with an error.")
             # return code, message, execute_result_dict
