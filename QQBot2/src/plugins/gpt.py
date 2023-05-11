@@ -262,7 +262,7 @@ async def send_ai(prompt, userid, callback=None):
                 "jailbreakConversationId": True
             }
             is_start = True
-        user_datas[userid]['message'] = prompt + " _end_"
+        user_datas[userid]['message'] = prompt
     # `key key为prompt的key `开头的, 匹配prompts变量里的各种角色扮演
     if prompt.startswith('`'):
         pr = prompt.replace('`', '')
@@ -438,10 +438,10 @@ async def send_bing_py(prompt: str, userid: str, callback=None):
                 res = await NewBingAI.send_wrap(user_datas[userid]["message"], userid,
                                                 user_datas[userid]["toneStyle"], callback)
             # 如果是异常中断的自动继续发送消息 ?
-            # if res.get("interrupt"):
-            #     await call_inner(res)
-            #     tag = 1
-            #     user_datas[userid]["message"] = "继续"
+            if res.get("interrupt"):
+                await call_inner(res)
+                tag = 1
+                user_datas[userid]["message"] = "!C"
             # if res.get("error"):
             #     if tag == 2:
             #         print(res)
