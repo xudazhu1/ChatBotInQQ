@@ -16,7 +16,7 @@ import webuiapi
 
 async def start():
     while 1:
-        ms = await gpt.send_bing(input(), "local")
+        ms = await gpt.send_ai(input(), "local", "creative")
         print(ms)
 
 

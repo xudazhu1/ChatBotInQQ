@@ -262,7 +262,7 @@ async def send_ai(prompt, userid, callback=None):
                 "jailbreakConversationId": True
             }
             is_start = True
-        user_datas[userid]['message'] = prompt
+        user_datas[userid]['message'] = prompt + " _end_"
     # `key key为prompt的key `开头的, 匹配prompts变量里的各种角色扮演
     if prompt.startswith('`'):
         pr = prompt.replace('`', '')
@@ -410,10 +410,7 @@ async def send_bing_py(prompt: str, userid: str, callback=None):
             res_t: str
             if res_v.get("error"):
                 res_t = "err: " + res_v.get("error") + "_end_"
-            else:
-                res_t = res_v.get("message")
-                user_datas[userid]["jailbreakConversationId"] = userid
-                redis_connect.set("user_datas", json.dumps(user_datas))
+            res_t = res_v.get("message")
             if callback:
                 if asyncio.iscoroutinefunction(callback):
                     await callback(res_t)
@@ -438,10 +435,10 @@ async def send_bing_py(prompt: str, userid: str, callback=None):
                 res = await NewBingAI.send_wrap(user_datas[userid]["message"], userid,
                                                 user_datas[userid]["toneStyle"], callback)
             # 如果是异常中断的自动继续发送消息 ?
-            if res.get("interrupt"):
-                await call_inner(res)
-                tag = 1
-                user_datas[userid]["message"] = "!C"
+            # if res.get("interrupt"):
+            #     await call_inner(res)
+            #     tag = 1
+            #     user_datas[userid]["message"] = "继续"
             # if res.get("error"):
             #     if tag == 2:
             #         print(res)
