@@ -3,7 +3,8 @@ import time
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 
-SLACK_USER_TOKEN = os.environ["SLACK_USER_TOKEN"]
+# SLACK_USER_TOKEN = os.environ["SLACK_USER_TOKEN"]
+SLACK_USER_TOKEN = "SLACK_USER_TOKEN"
 # SLACK_USER_TOKEN = '这里找到 https://api.slack.com/apps/'
 client = WebClient(token=SLACK_USER_TOKEN)
 # Claude 机器人在slack里面的userid 非频道id

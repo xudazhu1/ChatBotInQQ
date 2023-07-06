@@ -1,3 +1,6 @@
+import io
+from datetime import datetime
+
 import nest_asyncio
 
 nest_asyncio.apply()
@@ -142,23 +145,30 @@ async def sj(bot: Bot, event: Event, state: T_State):
             return test
 
         # 此处仅做图文拼接测试使用
-        if ans == "图片测试":
-            await msg.finish(image_gen())
+        if ans.startswith("图片测试"):
+            ans = ans.replace("图片测试", "")
+            name = "test.png"
+            if ans != "":
+                name = ans
+            current_working_dir = os.getcwd()
+            print(f'当前目录: {current_working_dir}')
+            res = Message(f'!!!!')
+            # file = open(current_working_dir + "/test.png", "rb")
+            res.append(MessageSegment.image(
+                # file=io.BytesIO(file.read()),
+                file="file:///" + current_working_dir + "/" + name,
+                type_="image",
+                # cache=False,
+                # proxy=False,
+            ))
+            res.append(MessageSegment.text(
+                "{一幅画，有Sydney和热带海滩的景色。Sydney是一个金发碧眼的美女，穿着连衣裙，"
+                "头上戴着花环，眨着眼睛，手里拿着一块冲浪板，赤脚走在沙滩上。}"))
+            await msg.finish(res)
+            # await msg.finish(image_gen())
             return
-        if ans == "回调测试":
-            index = 0
-            t_list = []
-            while index < 2:
-                t = MyTread.threadByFuture(image_gen)
-                # t = MyTread.threadByFuture(lambda: await image_gen())
-                t_list.append(t)
-                time.sleep(3)
-                index = index + 1
-            await msg.send(Message('任务发布完成'))
-            for t1 in t_list:
-                await msg.send(t1.result())
-                print(f"---------------任务{t1}执行完成-----------------")
-            await msg.finish(Message("任务执行完成!"))
+        if ans == "测试":
+            await msg.finish('测吉儿')
             return
 
         # 通过封装的函数获取腾讯智能机器人机器人的回复
@@ -262,7 +272,7 @@ async def send_ai(prompt, userid, callback=None):
                 "jailbreakConversationId": True
             }
             is_start = True
-        user_datas[userid]['message'] = prompt + " _end_"
+        user_datas[userid]['message'] = prompt
     # `key key为prompt的key `开头的, 匹配prompts变量里的各种角色扮演
     if prompt.startswith('`'):
         pr = prompt.replace('`', '')
@@ -355,7 +365,19 @@ def add_image(message_temp, user_id):
                     print("请求完成 正在组装")
                     print(image_message_segments)
                     for img_url in image_message_segments:
-                        res.append(MessageSegment.image("file://" + current_working_dir + "/" + img_url))
+                        # file = open(current_working_dir + "/" + img_url, "rb")
+                        # res.append(MessageSegment.image(
+                        #     file=io.BytesIO(file.read()),
+                        #     type_="image",
+                        #     cache=False,
+                        #     proxy=False,
+                        # ))
+                        res.append(MessageSegment.image(
+                            file="file:///" + current_working_dir + "/" + img_url,
+                            # type_="image",
+                            # cache=False,
+                            # proxy=False
+                        ))
             else:
                 res.append(MessageSegment.text(split_str))
     else:
@@ -601,20 +623,21 @@ def gen_img(prompt, img_index):
         print("------")
         print(negative_prompt)
         send_time = time.time()
-        path = "./" + img_index.__str__() + "-test.png"
+        path = "img_temp/" + datetime.now().strftime("%d.%m.%Y_%H-%M-%S") + "-test.png"
+        # path = "./img_temp/" + img_index.__str__() + "-test.png"
         result1 = api.txt2img(
             prompt=prompt,
             negative_prompt=negative_prompt,
-            alwayson_scripts={"Tiled VAE": {
-                "args": [
-                    True,
-                    True,
-                    True,
-                    True,
-                    True,
-                    1280,
-                    128]
-            }},
+            # alwayson_scripts={"Tiled VAE": {
+            #     "args": [
+            #         True,
+            #         True,
+            #         True,
+            #         True,
+            #         True,
+            #         1280,
+            #         128]
+            # }},
             seed=-1,
             width=640,
             height=1080,
@@ -767,7 +790,8 @@ gen_img_styles = {
         "prompt": "best quality, realistic, photorealistic, extremly detailed, an extremely delicate and beautiful, RAW photo, professional lighting, light on face, depth of field, ((a 19 years old girl,1 girl, solo))"
                   "{{p}}"
                   "(((very small head))), fashion girl, beautiful eyes, small breast,real face, real skin, realistic face, realistic skin, detailed eyes, detailed facial features, detailed clothes features, detailed face and breast, ((full body)), alluring,"
-                  "<lora:koreandolllikeness_V20:0.2>, <lora:fashionGirl:0.1>, <lora:cuteGirlMix4_v10:0.1>, <lora:shojovibe:0.1>, <lora:chilloutmixss30:0.1>, (ulzzang-6500:0.1),",
+                  # "<lora:koreandolllikeness_V20:0.2>, <lora:fashionGirl:0.1>, <lora:cuteGirlMix4_v10:0.1>, <lora:shojovibe:0.1>, <lora:chilloutmixss30:0.1>, (ulzzang-6500:0.1),"
+        ,
         "negative_prompt": "(worst quality, low quality, normal quality:1.4),(inaccurate limb:1.2),bad anatomy, bad hands, text, extra digit, fewer digits, cropped, normal quality, jpeg artifacts,signature, watermark, username, blurry, artist name,bad feet,(((ugly))),(((duplicate))),"
                            "((morbid)),((mutilated)),(((tranny))),mutated hands,(((poorly drawn hands))),(((bad proportions))),extra limbs,cloned face,(((disfigured))),(((more than 2 nipples))),((((missing arms)))),(((extra legs))),(((((fused fingers))))),(((((too many fingers))))),"
                            "(((unclear eyes))),sad,missing fingers, low quality body parts, missing body parts, disproportional body parts, indistinguishable body parts, branched body parts, bent, body parts, rheumatism finers, ugly fingers, melted fingers, too fat, too skiny, "
